@@ -1,0 +1,39 @@
+---
+- hosts: localhost
+  tasks:
+    - name: Get IP of Target
+      debug:
+        msg: "IP: {{ ansible_default_ipv4.address }}"
+
+    - name: Get OS info
+      debug:
+        msg: "The OS is : {{ansible_distribution}} {{ ansible_distribution_version}}"
+
+    - name: For Ubuntu/Linux
+      block: 
+        - name: Upload Certifiacte for Ubuntu/Linux 
+          ansible.builtin.copy:
+            src: /mnt/c/Users/Ajinkya/Desktop/Ansible/Cer/unix.sh
+            dest: /mnt/c/Users/Ajinkya/Desktop/dest
+            #owner: root
+            #group: root
+            backup: yes
+        - name: Run Certifiacte update command 
+          ansible.builtin.command: echo update 
+      when :  (ansible_facts['distribution'] == "Ubuntu" ) or
+              (ansible_facts['distribution'] == "Linux" )
+
+    - name: For Ubuntu/Linux
+      block: 
+        - name: Upload Certifiacte for RedHat/CentOS
+          ansible.builtin.copy:
+            src: /mnt/c/Users/Ajinkya/Desktop/Ansible/Cer/RHEL.sh
+            dest: /mnt/c/Users/Ajinkya/Desktop/dest
+            #owner: root
+            #group: root
+            backup: yes
+        - name: Run Certifiacte update command 
+          ansible.builtin.command: echo update 
+      when :  (ansible_facts['distribution'] == "RedHat" ) or
+              (ansible_facts['distribution'] == "CentOS" )
+      
