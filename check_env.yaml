@@ -1,0 +1,14 @@
+---
+- hosts: localhost
+  tasks:
+    - name: Get OS info
+      debug:
+        msg: "The OS is : {{ansible_distribution}} {{ ansible_distribution_version}}"
+
+    - name: Get my File
+      command : chdir= /mnt/c/Users/Ajinkya/Desktop sudo sh sample.sh
+      register: details
+
+    - name: Contnt of file
+      debug: 
+        msg: "{{details.stdout_lines}}"
