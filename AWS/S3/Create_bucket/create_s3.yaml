@@ -1,0 +1,19 @@
+---
+- hosts: all
+  gather_facts: no 
+  vars_files: 
+    - aws_keys.yaml
+
+  tasks:
+  - name: create S3 bucket
+    s3_bucket:
+      name: "{{bucket_name}}"
+      aws_access_key: "{{ access_key }}"
+      aws_secret_key: "{{ secret_key }}"
+      policy: "{{ lookup( 'file','bucket_policy.json' )}}"
+      state: present
+      region: "{{region_name}"
+      versioning: no
+      tags:
+         name: myansiblebucket
+         type: example

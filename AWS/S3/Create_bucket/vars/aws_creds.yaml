@@ -1,0 +1,4 @@
+# Use ansible-vault encrypt aws_creds.yaml
+
+access_key: XXXXXXXXX
+secret_key: XXXXXXXXX
