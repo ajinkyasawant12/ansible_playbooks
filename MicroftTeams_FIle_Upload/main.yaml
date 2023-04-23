@@ -1,0 +1,33 @@
+##Ansible playbook that uses the Microsoft Teams Incoming Webhook connector to send a file to a channel:
+---
+- hosts: localhost
+  vars:
+    teams_webhook_url: "https://outlook.office.com/webhook/your-webhook-url"
+    file_path: "/path/to/your/file"
+  tasks:
+    - name: Send file to Microsoft Teams
+      uri:
+        url: "{{ teams_webhook_url }}"
+        method: POST
+        body_format: json
+        body:
+          "@type": "MessageCard"
+          "@context": "http://schema.org/extensions"
+          "themeColor": "0072C6"
+          "summary": "New file uploaded"
+          "sections":
+            - "activityTitle": "New file uploaded"
+              "activitySubtitle": "{{ file_path }}"
+              "facts":
+                - "name": "File name"
+                  "value": "{{ file_path | basename }}"
+                - "name": "File size"
+                  "value": "{{ lookup('file', file_path) | filesizeformat }}"
+          "attachments":
+            - "contentType": "{{ lookup('mime', file_path) }}"
+              "contentUrl": "data:{{ lookup('mime', file_path) }};base64,{{ lookup('file', file_path) | b64encode }}"
+      register: result
+      ignore_errors: yes
+    - name: Debug Teams response
+      debug:
+        var: result.content
