@@ -1,0 +1,30 @@
+---
+- hosts: localhost
+  vars:
+    teams_webhook_url: "https://outlook.office.com/webhook/your-webhook-url"
+    file_path: "/path/to/your/file"
+  tasks:
+    - name: Send text message to Microsoft Teams
+      uri:
+        url: "https://outlook.office.com/webhook/YOUR_WEBHOOK_URL_HERE"
+        method: POST
+        body_format: json
+        headers:
+          'Content-Type': 'application/json'
+        body:
+          "@type": "MessageCard"
+          "@context": "http://schema.org/extensions"
+          "themeColor": "0076D7"
+          "summary": "Text message"
+          "sections": [
+            {
+              "activityTitle": "Text message",
+              "activitySubtitle": "Sending a text message to Microsoft Teams",
+              "text": "This is a test message from Ansible."
+            }
+          ]
+      register: response
+
+    - name: Debug response
+      debug:
+        var: response
