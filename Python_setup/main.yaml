@@ -10,15 +10,15 @@
       setup:
       register: os_info
 
-    - name: Install required dependencies for Python build (example for Ubuntu)
+    - name: Install required dependencies for Python build for Ubuntu
       apt:
         name: build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev
         state: present
       when: "'Ubuntu' in os_info.ansible_facts['ansible_distribution']"
 
-    - name: Install required dependencies for Python build (example for CentOS/RHEL)
+    - name: Install required dependencies for Python build for CentOS/RHEL
       yum:
-        name: zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel
+        name: zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
         state: present
       when: "'CentOS' in os_info.ansible_facts['ansible_distribution'] or 'Red Hat Enterprise Linux' in os_info.ansible_facts['ansible_distribution']"
 
@@ -38,6 +38,13 @@
         ./configure --prefix=/opt/python{{ python_version }}
         make
         make altinstall
+
+    - name: Add Python {{ python_version }} to .bashrc
+      lineinfile:
+        path: "/home/{{ ansible_user }}/.bashrc"
+        line: "alias python{{ python_version | regex_replace('\\.','') }}='/opt/python{{ python_version }}/bin/python{{ python_version }}'"
+        become: "{{ ansible_user }}"
+        insertafter: EOF
 
     - name: Verify Python installation
       command: "/opt/python{{ python_version }}/bin/python{{ python_version }} --version"
