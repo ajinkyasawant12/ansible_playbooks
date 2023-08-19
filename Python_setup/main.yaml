@@ -14,6 +14,12 @@
         state: present
       when: "'Ubuntu' in os_info.ansible_facts['ansible_distribution']"
 
+    - name: Install required dependencies for Python build (example for CentOS/RHEL)
+      yum:
+        name: zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel
+        state: present
+      when: "'CentOS' in os_info.ansible_facts['ansible_distribution'] or 'Red Hat Enterprise Linux' in os_info.ansible_facts['ansible_distribution']"
+
     - name: Download Python source tarball
       get_url:
         url: https://www.python.org/ftp/python/3.9.7/Python-3.9.7.tgz
