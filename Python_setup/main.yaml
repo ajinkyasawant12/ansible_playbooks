@@ -2,6 +2,8 @@
 - name: Install Python from source based on OS
   hosts: localhost
   become: true
+  vars:
+    python_version: "3.9.7"  # Default Python version
 
   tasks:
     - name: Check OS version
@@ -22,20 +24,20 @@
 
     - name: Download Python source tarball
       get_url:
-        url: https://www.python.org/ftp/python/3.9.7/Python-3.9.7.tgz
-        dest: /tmp/Python-3.9.7.tgz
+        url: "https://www.python.org/ftp/python/{{ python_version }}/Python-{{ python_version }}.tgz"
+        dest: "/tmp/Python-{{ python_version }}.tgz"
 
     - name: Extract Python source tarball
       unarchive:
-        src: /tmp/Python-3.9.7.tgz
-        dest: /tmp
+        src: "/tmp/Python-{{ python_version }}.tgz"
+        dest: "/tmp"
 
     - name: Configure and install Python from source
       command: |
-        cd /tmp/Python-3.9.7
-        ./configure
+        cd "/tmp/Python-{{ python_version }}"
+        ./configure --prefix=/opt/python{{ python_version }}
         make
-        make install
+        make altinstall
 
     - name: Verify Python installation
-      command: python3 --version
+      command: "/opt/python{{ python_version }}/bin/python{{ python_version }} --version"
