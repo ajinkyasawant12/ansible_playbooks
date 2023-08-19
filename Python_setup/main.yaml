@@ -1,0 +1,35 @@
+---
+- name: Install Python from source based on OS
+  hosts: localhost
+  become: true
+
+  tasks:
+    - name: Check OS version
+      setup:
+      register: os_info
+
+    - name: Install required dependencies for Python build (example for Ubuntu)
+      apt:
+        name: build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev
+        state: present
+      when: "'Ubuntu' in os_info.ansible_facts['ansible_distribution']"
+
+    - name: Download Python source tarball
+      get_url:
+        url: https://www.python.org/ftp/python/3.9.7/Python-3.9.7.tgz
+        dest: /tmp/Python-3.9.7.tgz
+
+    - name: Extract Python source tarball
+      unarchive:
+        src: /tmp/Python-3.9.7.tgz
+        dest: /tmp
+
+    - name: Configure and install Python from source
+      command: |
+        cd /tmp/Python-3.9.7
+        ./configure
+        make
+        make install
+
+    - name: Verify Python installation
+      command: python3 --version
