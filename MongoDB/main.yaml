@@ -1,0 +1,92 @@
+---
+- name: Setup MongoDB
+  hosts: your_target_hosts
+  become: true
+
+  vars:
+    mongodb_version: "4.4"  # Specify the MongoDB version you want to install
+    mongodb_repo_file: "mongodb-org-{{ mongodb_version }}"  # Specify the .repo or .list file name
+
+  tasks:
+    - name: Check OS version
+      setup:
+      register: os_info
+
+    - name: Install MongoDB prerequisites (Ubuntu)
+      apt:
+        name:
+          - gnupg
+          - libcurl4
+          - wget
+          - lsb-release
+          - g++
+          - make
+        state: present
+      when: "'Ubuntu' in os_info.ansible_facts['ansible_distribution']"
+
+    - name: Upload MongoDB .repo file (RHEL/CentOS)
+      copy:
+        src: "path/to/{{ mongodb_repo_file }}.repo"  # Specify the path to your .repo file
+        dest: "/etc/yum.repos.d/{{ mongodb_repo_file }}.repo"
+        owner: root
+        group: root
+        mode: 0644
+      when: "'RedHat' in os_info.ansible_facts['ansible_distribution'] or 'CentOS' in os_info.ansible_facts['ansible_distribution']"
+
+    - name: Add MongoDB GPG key (Ubuntu)
+      apt_key:
+        url: https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc
+        state: present
+      when: "'Ubuntu' in os_info.ansible_facts['ansible_distribution']"
+
+    - name: Add MongoDB repository (Ubuntu)
+      apt_repository:
+        repo: deb [arch=amd64] https://repo.mongodb.org/apt/{{ os_info.ansible_facts['ansible_distribution'].lower() }} {{ ansible_distribution_release|lower }}/mongodb-org/{{ mongodb_version }} multiverse
+        state: present
+      when: "'Ubuntu' in os_info.ansible_facts['ansible_distribution']"
+
+    - name: Install MongoDB package (Ubuntu)
+      apt:
+        name: mongodb-org
+        state: present
+      when: "'Ubuntu' in os_info.ansible_facts['ansible_distribution']"
+
+    - name: Install MongoDB prerequisites (RHEL/CentOS)
+      yum:
+        name:
+          - gnupg
+          - libcurl
+          - wget
+          - redhat-lsb-core
+          - gcc-c++
+          - make
+        state: present
+      when: "'RedHat' in os_info.ansible_facts['ansible_distribution'] or 'CentOS' in os_info.ansible_facts['ansible_distribution']"
+
+    - name: Add MongoDB GPG key (RHEL/CentOS)
+      rpm_key:
+        key: https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc
+        state: present
+      when: "'RedHat' in os_info.ansible_facts['ansible_distribution'] or 'CentOS' in os_info.ansible_facts['ansible_distribution']"
+
+    - name: Add MongoDB repository (RHEL/CentOS)
+      yum_repository:
+        name: mongodb-org
+        description: MongoDB Repository
+        baseurl: https://repo.mongodb.org/yum/{{ os_info.ansible_facts['ansible_distribution'].lower() }}/{{ ansible_distribution_major_version }}/mongodb-org/{{ mongodb_version }}/x86_64/
+        enabled: yes
+        gpgcheck: yes
+        gpgkey: https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc
+      when: "'RedHat' in os_info.ansible_facts['ansible_distribution'] or 'CentOS' in os_info.ansible_facts['ansible_distribution']"
+
+    - name: Install MongoDB package (RHEL/CentOS)
+      yum:
+        name: mongodb-org
+        state: present
+      when: "'RedHat' in os_info.ansible_facts['ansible_distribution'] or 'CentOS' in os_info.ansible_facts['ansible_distribution']"
+
+    - name: Start and enable MongoDB service
+      service:
+        name: mongod
+        state: started
+        enabled: yes
