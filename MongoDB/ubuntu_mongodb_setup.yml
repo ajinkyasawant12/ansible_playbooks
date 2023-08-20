@@ -1,0 +1,42 @@
+---
+
+    - name: Install MongoDB prerequisites (Ubuntu)
+      apt:
+        name:
+          - gnupg
+          - libcurl4
+          - wget
+          - lsb-release
+          - g++
+          - make
+        state: present  
+
+    - name: Upload MongoDB .list file (Ubuntu)
+      template:
+        src: mongodb-org.list.j2
+        dest: "/etc/apt/sources.list.d/mongodb-org-{{ mongodb_version }}.list"
+        owner: root
+        group: root
+        mode: 0644      
+
+    - name: Add MongoDB GPG key (Ubuntu)
+      apt_key:
+        url: https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc
+        state: present     
+
+    - name: Add MongoDB repository (Ubuntu)
+      apt_repository:
+        repo: deb [arch=amd64] https://repo.mongodb.org/apt/{{ os_info.ansible_facts['ansible_distribution'].lower() }} $(lsb_release -sc)/mongodb-org/{{ mongodb_version }} multiverse
+        state: present     
+
+    - name: Install MongoDB package (Ubuntu)
+      apt:
+        name: mongodb-org
+        state: present      
+
+    - name: Start and enable MongoDB service
+      service:
+        name: mongod
+        state: started
+        enabled: yes
+       
