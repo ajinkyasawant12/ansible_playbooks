@@ -12,6 +12,7 @@
       setup:
       register: os_info
 
+
     - include: ubuntu_mongodb_setup.yml
       when: "'Ubuntu' in os_info.ansible_facts['ansible_distribution']"
 
