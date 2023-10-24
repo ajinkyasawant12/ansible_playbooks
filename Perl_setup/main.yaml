@@ -1,0 +1,72 @@
+#Script to Setup and install Perl on target vm
+
+---
+- name: Install Perl from Source
+  hosts: your_target_hosts
+  become: true
+
+  vars:
+    perl_version: "{{ perl_version | default('5.38.0') }}"  # Allow the user to specify the Perl version (default to '5.38.0')
+    perl_installation_dir: /opt/perl
+    perl_src_dir: /tmp/perl-source
+
+  tasks:
+    - name: Install required packages for Perl build
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - gcc
+        - make
+        - wget
+
+    - name: Create directories for Perl source and installation
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+      loop:
+        - "{{ perl_src_dir }}"
+        - "{{ perl_installation_dir }}"
+
+    - name: Download Perl source code
+      get_url:
+        url: "http://www.cpan.org/src/{{ perl_version }}/perl-{{ perl_version }}.tar.gz"
+        dest: "{{ perl_src_dir }}/perl-{{ perl_version }}.tar.gz"
+      when: perl_version != 'latest'
+
+    - name: Extract Perl source code
+      unarchive:
+        src: "{{ perl_src_dir }}/perl-{{ perl_version }}.tar.gz"
+        dest: "{{ perl_src_dir }}"
+        remote_src: yes
+      when: perl_version != 'latest'
+
+    - name: Configure and compile Perl
+      command: "sh ./Configure -de -Dprefix={{ perl_installation_dir }}/perl-{{ perl_version }}"
+      args:
+        chdir: "{{ perl_src_dir }}/perl-{{ perl_version }}"
+      when: perl_version != 'latest'
+
+    - name: Make and install Perl
+      command: "make && make install"
+      args:
+        chdir: "{{ perl_src_dir }}/perl-{{ perl_version }}"
+      when: perl_version != 'latest'
+
+    - name: Update alternatives for Perl
+      command: "update-alternatives --install /usr/local/bin/perl perl {{ perl_installation_dir }}/perl-{{ perl_version }}/bin/perl 1"
+      args:
+        creates: "/usr/local/bin/perl"
+      when: perl_version != 'latest'
+
+    - name: Set user's default Perl version
+      shell: "echo 'export PATH={{ perl_installation_dir }}/perl-{{ perl_version }}/bin:$PATH' >> ~/.bashrc"
+      args:
+        creates: "~/.bashrc"
+      when: perl_version != 'latest'
+
+    - name: Reload user's profile
+      shell: "source ~/.bashrc"
+      when: perl_version != 'latest'
