@@ -1,0 +1,79 @@
+#playbook to setup and install elasticsearch on target vm
+
+---
+- name: Install Elasticsearch from source
+  hosts: localhost
+  become: true
+
+  vars:
+    elasticsearch_version: "7.15.0"  # Default Elasticsearch version
+    elasticsearch_installation_dir: /opt/elasticsearch
+    elasticsearch_src_dir: /tmp/elasticsearch-source
+
+  tasks:
+    - name: Install required packages for Elasticsearch build
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - gcc
+        - make
+        - wget
+        - tar
+        - gzip
+        - java-1.8.0-openjdk-devel
+
+    - name: Create directories for Elasticsearch source and installation
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+      loop:
+        - "{{ elasticsearch_src_dir }}"
+        - "{{ elasticsearch_installation_dir }}"
+
+    - name: Download Elasticsearch source code
+      get_url:
+        url: "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
+        dest: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
+
+    - name: Extract Elasticsearch source code
+      unarchive:
+        src: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
+        dest: "{{ elasticsearch_src_dir }}"
+        remote_src: yes
+
+    - name: Configure and compile Elasticsearch
+      command: "JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.302.b08-0.el8_4.x86_64/ ./gradlew assemble"
+      args:
+        chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
+      when: elasticsearch_version != 'latest'
+
+    - name: Make and install Elasticsearch
+      command: "cp -R distribution/archives/tar/build/distributions/elasticsearch-{{ elasticsearch_version }}-SNAPSHOT.tar.gz {{ elasticsearch_installation_dir }}"
+      args:
+        chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
+      when: elasticsearch_version != 'latest'
+
+    - name: Update alternatives for Elasticsearch
+      command: "update-alternatives --install /usr/local/bin/elasticsearch elasticsearch {{ elasticsearch_installation_dir }}/elasticsearch-{{ elasticsearch_version }}/bin/elasticsearch 1"
+      args:
+        chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
+      when: elasticsearch_version != 'latest'
+
+    - name: Verify Elasticsearch installation
+      command: "elasticsearch --version"
+      args:
+        chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
+      when: elasticsearch_version != 'latest'
+
+    - name: Set user's default Elasticsearch version  
+      shell: "echo 'export PATH={{ elasticsearch_installation_dir }}/elasticsearch-{{ elasticsearch_version }}/bin:$PATH' >> ~/.bashrc"
+      args:
+        creates: "~/.bashrc"
+      when: elasticsearch_version != 'latest'
+
+    - name: Reload user's profile 
+      shell: "source ~/.bashrc"
+      when: elasticsearch_version != 'latest'
