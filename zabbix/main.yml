@@ -1,0 +1,80 @@
+- name: Install Zabbix agent
+  hosts: your_vm_host
+  become: true
+  tasks:
+    - name: Install Zabbix agent package
+      block:
+        - name: Install Zabbix agent package (Debian)
+          apt:
+            name: zabbix-agent
+            state: present
+          when: ansible_os_family == "Debian"
+
+        - name: Install Zabbix agent package (RedHat)
+          yum:
+            name: zabbix-agent
+            state: present
+          when: ansible_os_family == "RedHat"
+      rescue:
+        - name: Print error message
+          debug:
+            msg: "An error occurred during Zabbix agent installation."
+
+    - name: Configure Zabbix agent
+      template:
+        src: zabbix_agent.conf.j2
+        dest: /etc/zabbix/zabbix_agentd.conf
+        owner: root
+        group: root
+        mode: 0644
+      notify: restart zabbix agent
+
+    - name: Add host to Zabbix server
+      zabbix_host:
+        server_url: "{{ zabbix_server_url }}"
+        login_user: "{{ zabbix_login_user }}"
+        login_password: "{{ zabbix_login_password }}"
+        host_name: "{{ zabbix_host_name }}"
+        visible_name: "{{ zabbix_visible_name }}"
+        groups:
+          - name: your_host_group
+        templates:
+          - name: your_template_name
+      notify: Restart Zabbix server
+
+    - name: mail Notification
+      block:
+        - name: Send success email
+          mail:
+            host: your_smtp_server
+            port: your_smtp_port
+            username: your_smtp_username
+            password: your_smtp_password
+            to: Your Name <your.email@example.com>
+            subject: Zabbix agent installation successful
+            body: "The Zabbix agent was successfully installed and added to the Zabbix server. The IP address of the host is: \"{{ ansible_host }}\""
+          when: not ansible_failed_task
+          delegate_to: localhost
+
+        - name: Send failure email
+          mail:
+            host: your_smtp_server
+            port: your_smtp_port
+            username: your_smtp_username
+            password: your_smtp_password
+            to: Your Name <your.email@example.com>
+            subject: Zabbix agent installation failed
+            body: "An error occurred during the Zabbix agent installation on host with IP: \"{{ ansible_host }}\". The error was: \"{{ ansible_failed_result }}\""
+          when: ansible_failed_task is defined
+          delegate_to: localhost
+
+  handlers:
+    - name: restart zabbix agent
+      service:
+        name: zabbix-agent
+        state: restarted
+
+    - name: Restart Zabbix server
+      service:
+        name: zabbix-server
+        state: restarted      
