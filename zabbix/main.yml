@@ -1,3 +1,6 @@
+# Description: This playbook installs the Zabbix agent on a remote host and adds it to the Zabbix server. It also sends an email notification in case of success or failure.
+# Command to run the playbook: ansible-playbook -i /path/to/your/hosts.ini zabbix/main.yml
+
 - name: Install Zabbix agent
   hosts: your_vm_host
   become: true

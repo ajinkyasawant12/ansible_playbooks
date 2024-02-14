@@ -1,10 +1,11 @@
+#vars for zabbix_agent configuration
 zabbix_agent_pidfile: /var/run/zabbix/zabbix_agentd.pid
 zabbix_agent_logfile: /var/log/zabbix/zabbix_agentd.log
 zabbix_agent_logfilesize: 0
 zabbix_agent_server: zabbix.example.com
 zabbix_agent_serveractive: zabbix.example.com
 zabbix_agent_include: /etc/zabbix/zabbix_agentd.d/*.conf
-
+#vars for zabbix_host module
 zabbix_server_url: http://your_zabbix_server/api_jsonrpc.php
 zabbix_login_user: your_zabbix_username
 zabbix_login_password: your_zabbix_password
