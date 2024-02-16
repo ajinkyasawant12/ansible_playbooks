@@ -4,9 +4,27 @@
 - name: Install Zabbix agent
   hosts: your_vm_host
   become: true
+  vars:
+    vars_file: vars.yml
+    
   tasks:
     - name: Install Zabbix agent package
       block:
+        - name: Add Zabbix repository (Debian)
+          apt_repository:
+            repo: "deb http://repo.zabbix.com/zabbix/{{ zabbix_version }}/ubuntu $(lsb_release -sc) main"
+            state: present
+          when: ansible_os_family == "Debian"
+
+        - name: Add Zabbix repository (RedHat)
+          yum_repository:
+            name: zabbix
+            description: Zabbix Official Repository
+            baseurl: "http://repo.zabbix.com/zabbix/{{ zabbix_version }}/rhel/$releasever/$basearch/"
+            gpgcheck: no
+            enabled: yes
+          when: ansible_os_family == "RedHat"
+
         - name: Install Zabbix agent package (Debian)
           apt:
             name: zabbix-agent
