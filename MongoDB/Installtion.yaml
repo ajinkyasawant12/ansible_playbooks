@@ -1,0 +1,115 @@
+- name: Setup MongoDB
+  hosts: your_target_hosts
+  gather_facts: yes
+  become: true
+
+  vars:
+    mongodb_major_version: 7.0
+    mongodb_minor_version: 7.0.2
+
+  tasks:
+    - name: Check OS version
+      setup:
+      register: os_info
+    
+    - name: Check if MongoDB is installed
+      command: mongod --version
+      register: mongodb_installed
+      failed_when: false
+      changed_when: false
+
+    - name: Print message if MongoDB is installed
+      debug:
+        msg: "MongoDB is already installed. Proceed with upgrade."
+      when: mongodb_installed.rc == 0
+
+    - name: Installion of MongoDB
+      block:
+        - name : Installion of MongoDB on ubuntu
+          block:
+            - name: Install MongoDB prerequisites (Ubuntu)
+              apt:
+                name:
+                  - gnupg
+                  - libcurl4
+                  - wget
+                  - lsb-release
+                  - g++
+                  - make
+                state: present  
+
+            - name: Upload MongoDB .list file (Ubuntu)
+              template:
+                src: mongodb-org.list.j2
+                dest: "/etc/apt/sources.list.d/mongodb-org-{{ mongodb_version }}.list"
+                owner: root
+                group: root
+                mode: 0644      
+
+            - name: Add MongoDB GPG key (Ubuntu)
+              apt_key:
+                url: https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc
+                state: present     
+
+            - name: Add MongoDB repository (Ubuntu)
+              apt_repository:
+                repo: deb [arch=amd64] https://repo.mongodb.org/apt/{{ os_info.ansible_facts['ansible_distribution'].lower() }} $(lsb_release -sc)/mongodb-org/{{ mongodb_version }} multiverse
+                state: present     
+
+            - name: Install MongoDB package (Ubuntu)
+              apt:
+                name: mongodb-org={{ mongodb_minor_version }}  # Use the minor version here
+                state: present      
+
+            - name: Start and enable MongoDB service
+              service:
+                name: mongod
+                state: started
+                enabled: yes
+
+            - name: Check MongoDB service status (Ubuntu)
+              command: systemctl status mongod
+              register: mongod_status
+              ignore_errors: yes
+          when: "'Ubuntu' in os_info.ansible_facts['ansible_distribution']"
+
+        - name : Installion of MongoDB on RHEL and CentOS
+          block:
+            - name: Install MongoDB prerequisites (RHEL/CentOS)
+              yum:
+                name:
+                  - gnupg
+                  - libcurl
+                  - wget
+                  - redhat-lsb-core
+                  - gcc-c++
+                  - make
+                state: present
+
+            - name: Upload MongoDB .repo file (RHEL/CentOS)
+              template:
+                src: mongodb-org.repo.j2
+                dest: "/etc/yum.repos.d/mongodb-org-{{ mongodb_version }}.repo"
+                owner: root
+                group: root
+                mode: 0644
+
+            - name: Install MongoDB package (RHEL/CentOS)
+              yum:
+                name: mongodb-org={{ mongodb_minor_version }}  # Use the minor version here
+                state: present
+
+            - name: Start and enable MongoDB service
+              service:
+                name: mongod
+                state: started
+                enabled: yes
+            
+            - name: Check MongoDB service status (RHEL/CentOS)  
+              command: service mongod status
+              register: mongod_status
+              ignore_errors: yes
+          when: "'RedHat' in os_info.ansible_facts['ansible_distribution'] or 'CentOS' in os_info.ansible_facts['ansible_distribution']"  
+      when: mongodb_installed.rc != 0
+
+    

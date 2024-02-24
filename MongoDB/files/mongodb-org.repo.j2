@@ -1,6 +1,6 @@
-[mongodb-org-{{ mongodb_version }}]
+[mongodb-org-{{ mongodb_major_version }}]
 name=MongoDB Repository
-baseurl=https://repo.mongodb.org/yum/redhat/$releasever/mongodb-org/{{ mongodb_version }}/x86_64/
+baseurl=https://repo.mongodb.org/yum/redhat/$releasever/mongodb-org/{{ mongodb_major_version }}/x86_64/
 gpgcheck=1
 enabled=1
-gpgkey=https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc
+gpgkey=https://www.mongodb.org/static/pgp/server-{{ mongodb_major_version }}.asc
