@@ -1,0 +1,119 @@
+---
+- name: Upgrade MongoDB from 4.0 to 7.0
+  hosts: mongodb_servers
+  become: true
+  vars:
+    mongodb_version: "4.0" # Current MongoDB version
+    target_mongodb_version: "7.0" # Target MongoDB version
+
+  tasks:
+    - name: Stop MongoDB service
+      service:
+        name: mongod
+        state: stopped
+
+    - name: Backup MongoDB data
+      command: mongodump --out /path/to/backup/directory
+      args:
+        warn: false
+      register: backup_output
+      changed_when: backup_output.rc == 0
+
+    # Upgrade to MongoDB version 4.2
+    - name: Upgrade MongoDB binaries to version 4.2
+      apt:
+        name: mongodb-org=4.2.*
+        state: present
+
+    - name: Start MongoDB service after 4.2 upgrade
+      service:
+        name: mongod
+        state: started
+
+    - name: Verify MongoDB version after upgrading to 4.2
+      command: mongo --eval "db.version()"
+      register: mongo_version_output_4_2
+
+    - name: Check MongoDB version after upgrade to 4.2
+      debug:
+        msg: "MongoDB version is {{ mongo_version_output_4_2.stdout }}"
+
+    # Upgrade to MongoDB version 4.4
+    - name: Stop MongoDB service for 4.4 upgrade
+      service:
+        name: mongod
+        state: stopped
+
+    - name: Upgrade MongoDB binaries to version 4.4
+      apt:
+        name: mongodb-org=4.4.*
+        state: present
+
+    - name: Start MongoDB service after 4.4 upgrade
+      service:
+        name: mongod
+        state: started
+
+    - name: Verify MongoDB version after upgrading to 4.4
+      command: mongo --eval "db.version()"
+      register: mongo_version_output_4_4
+
+    - name: Check MongoDB version after upgrade to 4.4
+      debug:
+        msg: "MongoDB version is {{ mongo_version_output_4_4.stdout }}"
+
+    # Upgrade to MongoDB version 5.0
+    - name: Stop MongoDB service for 5.0 upgrade
+      service:
+        name: mongod
+        state: stopped
+
+    - name: Upgrade MongoDB binaries to version 5.0
+      apt:
+        name: mongodb-org=5.0.*
+        state: present
+
+    - name: Start MongoDB service after 5.0 upgrade
+      service:
+        name: mongod
+        state: started
+
+    - name: Verify MongoDB version after upgrading to 5.0
+      command: mongo --eval "db.version()"
+      register: mongo_version_output_5_0
+
+    - name: Check MongoDB version after upgrade to 5.0
+      debug:
+        msg: "MongoDB version is {{ mongo_version_output_5_0.stdout }}"
+
+    # Upgrade to MongoDB version 7.0
+    - name: Stop MongoDB service for 7.0 upgrade
+      service:
+        name: mongod
+        state: stopped
+
+    - name: Upgrade MongoDB binaries to version 7.0
+      apt:
+        name: mongodb-org=7.0.*
+        state: present
+
+    - name: Start MongoDB service after 7.0 upgrade
+      service:
+        name: mongod
+        state: started
+
+    - name: Verify MongoDB version after upgrading to 7.0
+      command: mongo --eval "db.version()"
+      register: mongo_version_output_7_0
+
+    - name: Check MongoDB version after upgrade to 7.0
+      debug:
+        msg: "MongoDB version is {{ mongo_version_output_7_0.stdout }}"
+
+    # Additional tasks for application driver upgrade, configuration changes, etc.
+
+  handlers:
+    - name: Restart MongoDB service
+      service:
+        name: mongod
+        state: restarted
