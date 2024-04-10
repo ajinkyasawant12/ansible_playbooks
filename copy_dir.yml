@@ -1,0 +1,23 @@
+# Copy directory if space is available on participation where dir is present
+
+---
+- name: Copy directory if space is available
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Get current date
+      shell: date +%Y%m%d
+      register: current_date
+
+    - name: Check available disk space in GB
+      shell: df -BG /home/test | awk 'NR==2{print $4}' | grep -oP '\d+'
+      register: disk_space
+
+    - name: Get directory size in GB
+      shell: echo $(($(du -sk /home/test | awk '{print $1}') / 1048576))
+      register: directory_size
+
+    - name: Copy directory
+      command: cp -r /home/test /home/test-{{ current_date.stdout }}
+      when: disk_space.stdout | int > directory_size.stdout | int
