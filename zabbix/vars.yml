@@ -1,4 +1,4 @@
-zabbix_version: 5.0
+zabbix_version: 6.4
 #vars for zabbix_agent configuration
 zabbix_agent_server: zabbix.example.com
 zabbix_agent_serveractive: zabbix.example.com

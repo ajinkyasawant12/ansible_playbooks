@@ -9,46 +9,55 @@
     
   tasks:
     - name: Install Zabbix agent package
+  block:
+    - name: Add Zabbix repository (Debian)
+      apt_repository:
+        repo: "deb https://repo.zabbix.com/zabbix/{{ zabbix_version }}/ubuntu $(lsb_release -sc) main"
+        state: present
+      when: ansible_os_family == "Debian"
+    - name: Add Zabbix repository (RedHat)
+      yum_repository:
+        name: zabbix
+        description: Zabbix Official Repository
+        baseurl: "https://repo.zabbix.com/zabbix/{{ zabbix_version }}/rhel/$releasever/$basearch/"
+        gpgcheck: no
+        enabled: yes
+      when: ansible_os_family == "RedHat" or "'Rocky' in os_info.ansible_facts['ansible_distribution']"
+    - name: Install Zabbix agent package (Debian)
+      apt:
+        name: zabbix-agent2
+        state: present
+      when: ansible_os_family == "Debian"
+    - name: Install Zabbix agent package (RedHat)
+      yum:
+        name: zabbix-agent2
+        state: present
+      when: ansible_os_family == "RedHat" or "'Rocky' in os_info.ansible_facts['ansible_distribution']"
+  rescue:
+    - name: Print error message
+      debug:
+        msg: "An error occurred during Zabbix agent installation."
+
+    - name: Configure and Enable Zabbix agent
       block:
-        - name: Add Zabbix repository (Debian)
-          apt_repository:
-            repo: "deb http://repo.zabbix.com/zabbix/{{ zabbix_version }}/ubuntu $(lsb_release -sc) main"
-            state: present
-          when: ansible_os_family == "Debian"
+        - name: Configure Zabbix agent
+          template:
+            src: zabbix_agent.conf.j2
+            dest: /etc/zabbix/zabbix_agentd.conf
+            owner: root
+            group: root
+            mode: 0644
 
-        - name: Add Zabbix repository (RedHat)
-          yum_repository:
-            name: zabbix
-            description: Zabbix Official Repository
-            baseurl: "http://repo.zabbix.com/zabbix/{{ zabbix_version }}/rhel/$releasever/$basearch/"
-            gpgcheck: no
+        - name: Enable Zabbix agent
+          systemd:
+            name: zabbix-agent2
             enabled: yes
-          when: ansible_os_family == "RedHat"
-
-        - name: Install Zabbix agent package (Debian)
-          apt:
-            name: zabbix-agent
-            state: present
-          when: ansible_os_family == "Debian"
-
-        - name: Install Zabbix agent package (RedHat)
-          yum:
-            name: zabbix-agent
-            state: present
-          when: ansible_os_family == "RedHat"
+      become: yes
+      notify: restart zabbix agent
       rescue:
         - name: Print error message
           debug:
-            msg: "An error occurred during Zabbix agent installation."
-
-    - name: Configure Zabbix agent
-      template:
-        src: zabbix_agent.conf.j2
-        dest: /etc/zabbix/zabbix_agentd.conf
-        owner: root
-        group: root
-        mode: 0644
-      notify: restart zabbix agent
+            msg: "An error occurred during Zabbix agent configuration."
 
     - name: Add host to Zabbix server
       zabbix_host:
@@ -92,7 +101,7 @@
   handlers:
     - name: restart zabbix agent
       service:
-        name: zabbix-agent
+        name: zabbix-agent2
         state: restarted
 
     - name: Restart Zabbix server
