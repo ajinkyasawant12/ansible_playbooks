@@ -1,52 +1,91 @@
 # Description: This playbook installs the Zabbix agent on a remote host and adds it to the Zabbix server. It also sends an email notification in case of success or failure.
 # Command to run the playbook: ansible-playbook -i /path/to/your/hosts.ini zabbix/main.yml
+# https://www.zabbix.com/download?zabbix=6.4&os_distribution=red_hat_enterprise_linux&os_version=9&components=agent_2&db=&ws=
 
 - name: Install Zabbix agent
   hosts: your_vm_host
   become: true
   vars:
-    vars_file: vars.yml
+    zabbix_version: 6.4
+    #vars for zabbix_agent configuration
+    zabbix_agent_server: zabbix.example.com
+    zabbix_agent_serveractive: zabbix.example.com
+    #vars for zabbix_host module
+    zabbix_server_url: http://your_zabbix_server/api_jsonrpc.php
+    zabbix_login_user: your_zabbix_username
+    zabbix_login_password: your_zabbix_password
+    zabbix_host_name: your_vm_host
+    zabbix_visible_name: Your VM Host
+    #vars for mail module
+    smtp_server: smtp.example.com
+    smtp_port: 587
+    #vars for teams module
+    teams_webhook_url: https://outlook.office.com/webhook/your_webhook_url
+
     
   tasks:
     - name: Install Zabbix agent package
-  block:
-    - name: Add Zabbix repository (Debian)
-      apt_repository:
-        repo: "deb https://repo.zabbix.com/zabbix/{{ zabbix_version }}/ubuntu $(lsb_release -sc) main"
-        state: present
-      when: ansible_os_family == "Debian"
-    - name: Add Zabbix repository (RedHat)
-      yum_repository:
-        name: zabbix
-        description: Zabbix Official Repository
-        baseurl: "https://repo.zabbix.com/zabbix/{{ zabbix_version }}/rhel/$releasever/$basearch/"
-        gpgcheck: no
-        enabled: yes
-      when: ansible_os_family == "RedHat" or "'Rocky' in os_info.ansible_facts['ansible_distribution']"
-    - name: Install Zabbix agent package (Debian)
-      apt:
-        name: zabbix-agent2
-        state: present
-      when: ansible_os_family == "Debian"
-    - name: Install Zabbix agent package (RedHat)
-      yum:
-        name: zabbix-agent2
-        state: present
-      when: ansible_os_family == "RedHat" or "'Rocky' in os_info.ansible_facts['ansible_distribution']"
-  rescue:
-    - name: Print error message
-      debug:
-        msg: "An error occurred during Zabbix agent installation."
+      block:
+        - name: Configure and Install Zabbix agent for Debian
+          block:
+            - name: Add Zabbix repository
+              apt_repository:
+                repo: "deb https://repo.zabbix.com/zabbix/{{ zabbix_version }}/ubuntu $(lsb_release -sc) main"
+                state: present
+            - name: Install Zabbix agent and plugins
+              apt:
+                name:
+                  - zabbix-agent2
+                  - 'zabbix-agent2-plugin-*'
+                state: present
+              become: yes
+
+            - name: Enable Zabbix agent
+              systemd:
+                name: zabbix-agent2
+                enabled: yes
+              become: yes
+          when: ansible_os_family == "Debian"
+
+        - name: Configure and Install Zabbix agent for RHEL and Rocky Linux
+          block:
+            - name: Add Zabbix repository
+              yum_repository:
+                name: zabbix
+                description: Zabbix Official Repository
+                baseurl: "https://repo.zabbix.com/zabbix/{{ zabbix_version }}/rhel/$releasever/$basearch/"
+                gpgcheck: no
+                enabled: yes
+            - name: Install Zabbix agent package
+              yum:
+                name:
+                - zabbix-agent2
+                - 'zabbix-agent2-plugin-*'
+                state: present
+            - name: Enable Zabbix agent
+              systemd:
+                name: zabbix-agent2
+                enabled: yes
+              become: yes
+          when: ansible_os_family == "RedHat" or "'Rocky' in os_info.ansible_facts['ansible_distribution']"
+      rescue:
+        - name: Print error message
+          debug:
+            msg: "An error occurred during Zabbix agent installation."
 
     - name: Configure and Enable Zabbix agent
       block:
-        - name: Configure Zabbix agent
-          template:
-            src: zabbix_agent.conf.j2
-            dest: /etc/zabbix/zabbix_agentd.conf
-            owner: root
-            group: root
-            mode: 0644
+        - name: Set Server value in Zabbix agent configuration
+          lineinfile:
+            path: /etc/zabbix/zabbix_agentd.conf
+            regexp: '^Server='
+            line: 'Server={{ zabbix_server }}'
+
+        - name: Set ServerActive value in Zabbix agent configuration
+          lineinfile:
+            path: /etc/zabbix/zabbix_agentd.conf
+            regexp: '^ServerActive='
+            line: 'ServerActive={{ zabbix_server_active }}'
 
         - name: Enable Zabbix agent
           systemd:
@@ -76,10 +115,9 @@
       block:
         - name: Send success email
           mail:
-            host: your_smtp_server
-            port: your_smtp_port
-            username: your_smtp_username
-            password: your_smtp_password
+            host: " {{ smtp_server }}"
+            port: "{{ smtp_port }}"
+            from: Your Name <your.email@example.com>
             to: Your Name <your.email@example.com>
             subject: Zabbix agent installation successful
             body: "The Zabbix agent was successfully installed and added to the Zabbix server. The IP address of the host is: \"{{ ansible_host }}\""
@@ -88,13 +126,48 @@
 
         - name: Send failure email
           mail:
-            host: your_smtp_server
-            port: your_smtp_port
-            username: your_smtp_username
-            password: your_smtp_password
+            host: " {{ smtp_server }}"
+            port: "{{ smtp_port }}"
+            from: Your Name <your.email@example.com>
             to: Your Name <your.email@example.com>
             subject: Zabbix agent installation failed
             body: "An error occurred during the Zabbix agent installation on host with IP: \"{{ ansible_host }}\". The error was: \"{{ ansible_failed_result }}\""
+          when: ansible_failed_task is defined
+          delegate_to: localhost
+
+    - name: Teams Notification
+      block:
+        - name: Send success notification to Teams
+          uri:
+            url: "{{ teams_webhook_url }}"
+            method: POST
+            body: >
+              {
+                "@type": "MessageCard",
+                "@context": "http://schema.org/extensions",
+                "themeColor": "00FF00",
+                "title": "Zabbix agent installation successful",
+                "text": "The Zabbix agent was successfully installed and added to the Zabbix server. The IP address of the host is: \"{{ ansible_host }}\""
+              }
+            headers:
+              Content-Type: "application/json"
+          when: not ansible_failed_task
+          delegate_to: localhost
+
+        - name: Send failure notification to Teams
+          uri:
+            url: "{{ teams_webhook_url }}"
+            method: POST
+            body: >
+              {
+                "@type": "MessageCard",
+                "@context": "http://schema.org/extensions",
+                "themeColor": "FF0000",
+                "title": "Zabbix agent installation failed",
+                "text": "An error occurred during the Zabbix agent installation on host with IP: \"{{ ansible_host }}\". The error was: \"{{ ansible_failed_result }}\""
+              }
+            headers:
+              Content-Type: "application/json"
           when: ansible_failed_task is defined
           delegate_to: localhost
 
