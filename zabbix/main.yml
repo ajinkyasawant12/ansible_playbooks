@@ -103,13 +103,22 @@
         server_url: "{{ zabbix_server_url }}"
         login_user: "{{ zabbix_login_user }}"
         login_password: "{{ zabbix_login_password }}"
-        host_name: "{{ zabbix_host_name }}"
-        visible_name: "{{ zabbix_visible_name }}"
-        groups:
-          - name: your_host_group
-        templates:
-          - name: your_template_name
-      notify: Restart Zabbix server
+        host_name: "{{ inventory_hostname }}"
+        visible_name: "{{ inventory_hostname }}"
+        host_groups:
+          - Application
+        link_templates:
+          - Linux by Zabbix agent
+        status: enabled
+        state: present
+        interfaces:
+          - type: 1
+            main: 1
+            useip: 1
+            ip: "{{ ansible_host }}"
+            dns: ""
+            port: "10050"
+      delegate_to: localhost
 
     - name: mail Notification
       block:
