@@ -7,16 +7,29 @@
       command: cat ~/.bash_profile
       register: bash_profile_content
 
-    - name: Extract specific environment variables
+    - name: Extract TOP environment variable
       set_fact:
-        env_vars: >-
-          {{
-            dict(bash_profile_content.stdout | regex_findall('export (TOP|Java_Home|Java8_Home|Perl_home)=(.+)') | 
-                 map('regex_replace', 'export ', '') | 
-                 map('regex_search', '(\\w+)=([^\\s]+)', '\\1:\\2') | 
-                 map('split', ':') | 
-                 map('list', ['key', 'value']))
-          }}
+        top_var: "{{ bash_profile_content.stdout | regex_search('export TOP=(.+)', '\\1') }}"
+    
+    - name: Extract Java_Home environment variable
+      set_fact:
+        java_home_var: "{{ bash_profile_content.stdout | regex_search('export Java_Home=(.+)', '\\1') }}"
+
+    - name: Extract Java8_Home environment variable
+      set_fact:
+        java8_home_var: "{{ bash_profile_content.stdout | regex_search('export Java8_Home=(.+)', '\\1') }}"
+    
+    - name: Extract Perl_home environment variable
+      set_fact:
+        perl_home_var: "{{ bash_profile_content.stdout | regex_search('export Perl_home=(.+)', '\\1') }}"
+
+    - name: Set environment variables for subsequent tasks
+      set_fact:
+        env_vars:
+          TOP: "{{ top_var }}"
+          Java_Home: "{{ java_home_var }}"
+          Java8_Home: "{{ java8_home_var }}"
+          Perl_home: "{{ perl_home_var }}"
 
     - name: Print extracted environment variables (for debugging)
       debug:
