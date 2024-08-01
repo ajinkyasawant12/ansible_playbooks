@@ -1,0 +1,41 @@
+---
+- name: Read and set specific environment variables from .bash_profile
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Read .bash_profile
+      command: cat ~/.bash_profile
+      register: bash_profile_content
+
+    - name: Extract specific environment variables
+      set_fact:
+        env_vars: >-
+          {{
+            dict(bash_profile_content.stdout | regex_findall('export (TOP|Java_Home|Java8_Home|Perl_home)=(.+)') | 
+                 map('regex_replace', 'export ', '') | 
+                 map('regex_search', '(\\w+)=([^\\s]+)', '\\1:\\2') | 
+                 map('split', ':') | 
+                 map('list', ['key', 'value']))
+          }}
+
+    - name: Print extracted environment variables (for debugging)
+      debug:
+        msg: "{{ item.key }}={{ item.value }}"
+      with_items: "{{ env_vars | dict2items }}"
+
+    # Example tasks that use the extracted environment variables
+    - name: Example task that uses the TOP environment variable
+      shell: echo $TOP
+      environment: "{{ env_vars }}"
+    
+    - name: Example task that uses the Java_Home environment variable
+      shell: echo $Java_Home
+      environment: "{{ env_vars }}"
+
+    - name: Example task that uses the Java8_Home environment variable
+      shell: echo $Java8_Home
+      environment: "{{ env_vars }}"
+
+    - name: Example task that uses the Perl_home environment variable
+      shell: echo $Perl_home
+      environment: "{{ env_vars }}"
