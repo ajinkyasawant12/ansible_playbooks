@@ -1,7 +1,5 @@
 #!/bin/bash
 
-#!/bin/bash
-
 # Variables for Find and Replace
 SNAPSHOT_SEARCH="SNAPSHOT"
 SNAPSHOT_REPLACE="new_snapshot_value"
@@ -40,13 +38,13 @@ find . -type f ! -name "*.templates" ! -path "./.metadata/*" ! -path "./.jazz/*"
 
 # Optional: Output the list of modified files
 echo "Modified files containing new snapshot value:"
-find . -type f -exec grep -l "$SNAPSHOT_REPLACE" {} +
+find . -type f ! -path "./.metadata/*" ! -path "./.jazz/*" -exec grep -l "$SNAPSHOT_REPLACE" {} +
 
 echo "Modified files containing new build version:"
-find . -type f ! -name "*.templates" -exec grep -l "$BUILD_VERSION_REPLACE" {} +
+find . -type f ! -name "*.templates" ! -path "./.metadata/*" ! -path "./.jazz/*" -exec grep -l "$BUILD_VERSION_REPLACE" {} +
 
 echo "Modified files containing new stream name:"
-find . -type f ! -name "*.templates" -exec grep -l "$STREAM_NAME_REPLACE" {} +
+find . -type f ! -name "*.templates" ! -path "./.metadata/*" ! -path "./.jazz/*" -exec grep -l "$STREAM_NAME_REPLACE" {} +
 
 # Navigate to the templates directory to create the properties file
 cd $TEMPLATES_DIR
