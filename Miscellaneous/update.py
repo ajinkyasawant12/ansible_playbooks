@@ -12,6 +12,8 @@ BUILD_VERSION_REPLACE = "new_build_version"
 STREAM_NAME_SEARCH = "old_stream_name"
 STREAM_NAME_REPLACE = "new_stream_name"
 
+WORKSPACE = "/path/to/your/workspace"
+
 # Variables for Creating the Properties File
 TEMPLATES_DIR = "ccd_src/bin/templates"
 SOURCE_FILE = "mdmce_12.0.12.properties"
@@ -39,7 +41,7 @@ def read_file(file_path):
 def read_file_list(file_list_path):
     try:
         with open(file_list_path, 'r') as file:
-            return [line.strip() for line in file if line.strip()]
+            return [os.path.join(WORKSPACE, line.strip()) for line in file if line.strip()]
     except Exception as e:
         print(f"Error reading file list {file_list_path}: {e}")
         return []
@@ -78,7 +80,7 @@ def main():
         replace_in_file(file_path, [(STREAM_NAME_SEARCH, STREAM_NAME_REPLACE)])
 
     # Navigate to the templates directory to create the properties file
-    templates_path = os.path.join(os.path.dirname(snapshot_files[0]), TEMPLATES_DIR)
+    templates_path = os.path.join(WORKSPACE, TEMPLATES_DIR)
     source_file_path = os.path.join(templates_path, SOURCE_FILE)
     target_file_path = os.path.join(templates_path, TARGET_FILE)
 
