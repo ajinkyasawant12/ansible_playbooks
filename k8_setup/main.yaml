@@ -1,0 +1,31 @@
+---
+- name: Ansible k8s module example
+  hosts: web
+  remote_user: root  
+  tasks:
+    - name: Create a k8s namespace
+      kubernetes.core.k8s:
+        name: test-namespace 
+        api_version: v1
+        kind: Namespace
+        state: present    
+
+    - name: Create a pod
+      kubernetes.core.k8s:
+        state: present      
+        namespace: test-namespace 
+        src: /tmp/pod.yaml
+
+    - name: Get an existing Pods in the kubernetes cluster
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: pod
+        name: nginx
+        namespace: test-namespace  
+      register: web_service
+
+    - name: Create a deployment
+      kubernetes.core.k8s:
+        state: present            
+        namespace: test-namespace  
+        src: /tmp/deployment.yaml  

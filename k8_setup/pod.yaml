@@ -1,0 +1,13 @@
+# pod.yaml template file that creates pod
+apiVersion: v1        
+kind: Pod             
+Namespace: ata-namespace
+metadata:             
+  name: nginx
+  labels:
+    app: nginx
+    tier: frontend
+spec:                 
+  containers:
+  - name: nginx
+    image: nginx
