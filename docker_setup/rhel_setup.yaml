@@ -1,0 +1,56 @@
+---
+#Ansible playbook for Docker installation on RHEL
+
+- name: Install Docker on RHEL
+  hosts: all
+  become: true
+  vars_files:
+    - vars/default.yml
+
+  tasks:
+    - name: Install dependencies
+      ansible.builtin.yum:
+        name: "{{item}}"
+        state: latest
+        update_cache: yes
+        loop: [ 'apt-transport-https', 'lsb-release' , 'gnupg' , 'ca-certificates', 'curl', 'software-properties-common', 'python3-pip', 'virtualenv', 'python3-setuptools'] 
+
+    - name: Adding Docker GPG key
+      ansible.builtin.rpm_key:
+        url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+        state: present
+
+    - name: Adding Docker repository
+      ansible.builtin.yum_repository:
+        repo: "deb [arch={{ ansible_architecture }}] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Installing Docker
+      ansible.builtin.yum:
+        name: "{{item}}"
+        state: latest
+        update_cache: yes
+      loop: [ 'docker-ce', 'docker-ce-cli' ]
+
+    - name: Install Docker Module for Python
+      pip:
+        name: docker
+
+    - name: Pull default Docker image
+      docker_image:
+        name: "{{ image_name }}"
+        source: pull
+      
+    - name: Create default containers
+      docker_container:
+        name: "{{ container_name }}{{ item }}"
+        image: "{{ image_name }}"
+        command: "{{ container_command }}"
+        state: present
+      with_sequence: count={{ container_count }}
+
+  handlers:
+    - name: restart docker
+      service: 
+        name: docker 
+        state: restarted
