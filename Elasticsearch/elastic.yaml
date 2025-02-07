@@ -11,6 +11,17 @@
     elasticsearch_src_dir: /tmp/elasticsearch-source
 
   tasks:
+    - name: Create elastic group
+      group:
+        name: elastic
+
+    - name: Create elastic user
+      user:
+        name: elastic
+        group: elastic
+        home: "{{ elasticsearch_installation_dir }}"
+        shell: /bin/bash
+
     - name: Install required packages for Elasticsearch build
       package:
         name: "{{ item }}"
@@ -27,8 +38,8 @@
       file:
         path: "{{ item }}"
         state: directory
-        owner: root
-        group: root
+        owner: elastic
+        group: elastic
       loop:
         - "{{ elasticsearch_src_dir }}"
         - "{{ elasticsearch_installation_dir }}"
@@ -37,23 +48,29 @@
       get_url:
         url: "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
         dest: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
+        owner: elastic
+        group: elastic
 
     - name: Extract Elasticsearch source code
       unarchive:
         src: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
         dest: "{{ elasticsearch_src_dir }}"
         remote_src: yes
+        owner: elastic
+        group: elastic
 
     - name: Configure and compile Elasticsearch
       command: "JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.302.b08-0.el8_4.x86_64/ ./gradlew assemble"
       args:
         chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
+      become_user: elastic
       when: elasticsearch_version != 'latest'
 
     - name: Make and install Elasticsearch
       command: "cp -R distribution/archives/tar/build/distributions/elasticsearch-{{ elasticsearch_version }}-SNAPSHOT.tar.gz {{ elasticsearch_installation_dir }}"
       args:
         chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
+      become_user: elastic
       when: elasticsearch_version != 'latest'
 
     - name: Update alternatives for Elasticsearch

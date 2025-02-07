@@ -1,0 +1,113 @@
+#playbook to setup and install opensearch on target vm
+
+---
+- name: Install OpenSearch from source
+  hosts: localhost
+  gather_facts: true
+  become: true
+
+  vars:
+    opensearch_version: "1.0.0"  # Default OpenSearch version
+    opensearch_installation_dir: /home/elastic/opensearch
+    opensearch_src_dir: /tmp/opensearch-source
+
+  tasks:
+    - name: Create opensearch group
+      group:
+        name: elastic
+
+    - name: Create opensearch user
+      user:
+        name: elastic
+        group: elastic
+        shell: /bin/bash
+
+    - name: Install required packages for OpenSearch build
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - wget
+        - tar
+        - gzip
+        - gcc
+    
+    - name: Check current vm.max_map_count value
+      command: cat /proc/sys/vm/max_map_count
+      register: max_map_count_value
+
+    - name: Set vm.max_map_count to 262144 if not already set
+      sysctl:
+        name: vm.max_map_count
+        value: 262144
+        state: present
+
+    - name: Persist vm.max_map_count setting
+      lineinfile:
+        path: /etc/sysctl.conf
+        regexp: '^vm.max_map_count'
+        line: 'vm.max_map_count=262144'
+        state: present
+
+    - name: Reload sysctl settings
+      command: sysctl -p
+
+    - name: Create directories for OpenSearch source and installation
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: elastic
+        group: elastic
+      loop:
+        - "{{ opensearch_src_dir }}"
+        - "{{ opensearch_installation_dir }}"
+
+    - name: Download OpenSearch source code
+      get_url:
+        url: "https://artifacts.opensearch.org/releases/bundle/opensearch/{{ opensearch_version }}/opensearch-{{ opensearch_version }}-linux-x64.tar.gz"
+        dest: "{{ opensearch_src_dir }}/opensearch-{{ opensearch_version }}-linux-x64.tar.gz"
+        owner: elastic
+        group: elastic
+
+    - name: Extract OpenSearch source code
+      unarchive:
+        src: "{{ opensearch_src_dir }}/opensearch-{{ opensearch_version }}-linux-x64.tar.gz"
+        dest: "{{ opensearch_installation_dir }}"
+        remote_src: yes
+        owner: elastic
+        group: elastic
+
+    - name: Update host ip in config/opensearch.yml
+      replace:  
+
+
+    - name: update config/opensearch.yml
+      copy:
+        src: opensearch.yml
+        dest: "{{ opensearch_installation_dir }}/opensearch-{{ opensearch_version }}/config/opensearch.yml"
+        owner: elastic
+        group: elastic
+    
+    - name: Start OpenSearch
+      command: "{{ opensearch_installation_dir }}/opensearch-{{ opensearch_version }}/bin/opensearch"
+      async: 1000
+      poll: 0
+
+    - name: Wait for OpenSearch to start
+      wait_for:
+        port: 9200
+        delay: 10
+        timeout: 300
+    
+    - name: Check OpenSearch status on host
+      uri:
+      url: "http://{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:9200"
+      return_content: yes
+      register: opensearch_status
+    
+    - name: Print OpenSearch status
+      debug:
+        var: opensearch_status.content
+    
+
+    
