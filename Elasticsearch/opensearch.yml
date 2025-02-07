@@ -10,6 +10,7 @@
     opensearch_version: "1.0.0"  # Default OpenSearch version
     opensearch_installation_dir: /home/elastic/opensearch
     opensearch_src_dir: /tmp/opensearch-source
+    opensearch_backup_dir: /home/elastic/opensearch_backup
 
   tasks:
     - name: Create opensearch group
@@ -51,6 +52,35 @@
 
     - name: Reload sysctl settings
       command: sysctl -p
+
+    - name: Check if OpenSearch is running
+      shell: "pgrep -f opensearch"
+      register: opensearch_pid
+      ignore_errors: true
+
+    - name: Print OpenSearch version if running
+      command: "{{ opensearch_installation_dir }}/opensearch-{{ opensearch_version }}/bin/opensearch --version"
+      when: opensearch_pid.stdout != ""
+      register: opensearch_version_output
+
+    - name: Print OpenSearch version
+      debug:
+        var: opensearch_version_output.stdout
+      when: opensearch_pid.stdout != ""
+
+    - name: Stop OpenSearch if running
+      command: "kill -TERM {{ opensearch_pid.stdout }}"
+      when: opensearch_pid.stdout != ""
+
+    - name: Wait for OpenSearch to stop
+      wait_for:
+        path: "/proc/{{ opensearch_pid.stdout }}"
+        state: absent
+      when: opensearch_pid.stdout != ""
+
+    - name: Backup existing OpenSearch directory
+      command: "cp -r {{ opensearch_installation_dir }} {{ opensearch_backup_dir }}"
+      when: opensearch_pid.stdout != ""
 
     - name: Create directories for OpenSearch source and installation
       file:
@@ -108,6 +138,4 @@
     - name: Print OpenSearch status
       debug:
         var: opensearch_status.content
-    
-
     
