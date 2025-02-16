@@ -5,6 +5,14 @@
   vars:
     mongodb_version: "4.0" # Current MongoDB version
     target_mongodb_version: "7.0" # Target MongoDB version
+    test_db: "test_db"
+    test_collection: "test_collection"
+    test_data: '{"name": "test", "value": 1}'
+    upgrade_versions:
+      - "4.2"
+      - "4.4"
+      - "5.0"
+      - "7.0"
 
   tasks:
     - name: Stop MongoDB service
@@ -19,98 +27,42 @@
       register: backup_output
       changed_when: backup_output.rc == 0
 
-    # Upgrade to MongoDB version 4.2
-    - name: Upgrade MongoDB binaries to version 4.2
-      apt:
-        name: mongodb-org=4.2.*
-        state: present
+    - name: exit from playbook if backup failed
+      meta: end_play
+      when: backup_output.rc != 0
 
-    - name: Start MongoDB service after 4.2 upgrade
+    - name: Start MongoDB service
       service:
         name: mongod
         state: started
 
-    - name: Verify MongoDB version after upgrading to 4.2
+    - name: Insert test data into MongoDB
+      command: mongo {{ test_db }} --eval 'db.{{ test_collection }}.insert({{ test_data }})'
+      register: insert_test_data_output
+
+    - name: Verify test data insertion
+      command: mongo {{ test_db }} --eval 'db.{{ test_collection }}.find({{ test_data }}).count()'
+      register: verify_test_data_insertion
+      changed_when: verify_test_data_insertion.stdout == "1"
+
+    - name: Upgrade MongoDB
+      include_tasks: upgrade_mongodb.yml
+      loop: "{{ upgrade_versions }}"
+      loop_control:
+        loop_var: upgrade_version
+
+    - name: Verify MongoDB version after upgrading to {{ target_mongodb_version }}
       command: mongo --eval "db.version()"
-      register: mongo_version_output_4_2
+      register: mongo_version_output_final
 
-    - name: Check MongoDB version after upgrade to 4.2
+    - name: Check MongoDB version after upgrade to {{ target_mongodb_version }}
       debug:
-        msg: "MongoDB version is {{ mongo_version_output_4_2.stdout }}"
+        msg: "MongoDB version is {{ mongo_version_output_final.stdout }}"
 
-    # Upgrade to MongoDB version 4.4
-    - name: Stop MongoDB service for 4.4 upgrade
-      service:
-        name: mongod
-        state: stopped
-
-    - name: Upgrade MongoDB binaries to version 4.4
-      apt:
-        name: mongodb-org=4.4.*
-        state: present
-
-    - name: Start MongoDB service after 4.4 upgrade
-      service:
-        name: mongod
-        state: started
-
-    - name: Verify MongoDB version after upgrading to 4.4
-      command: mongo --eval "db.version()"
-      register: mongo_version_output_4_4
-
-    - name: Check MongoDB version after upgrade to 4.4
-      debug:
-        msg: "MongoDB version is {{ mongo_version_output_4_4.stdout }}"
-
-    # Upgrade to MongoDB version 5.0
-    - name: Stop MongoDB service for 5.0 upgrade
-      service:
-        name: mongod
-        state: stopped
-
-    - name: Upgrade MongoDB binaries to version 5.0
-      apt:
-        name: mongodb-org=5.0.*
-        state: present
-
-    - name: Start MongoDB service after 5.0 upgrade
-      service:
-        name: mongod
-        state: started
-
-    - name: Verify MongoDB version after upgrading to 5.0
-      command: mongo --eval "db.version()"
-      register: mongo_version_output_5_0
-
-    - name: Check MongoDB version after upgrade to 5.0
-      debug:
-        msg: "MongoDB version is {{ mongo_version_output_5_0.stdout }}"
-
-    # Upgrade to MongoDB version 7.0
-    - name: Stop MongoDB service for 7.0 upgrade
-      service:
-        name: mongod
-        state: stopped
-
-    - name: Upgrade MongoDB binaries to version 7.0
-      apt:
-        name: mongodb-org=7.0.*
-        state: present
-
-    - name: Start MongoDB service after 7.0 upgrade
-      service:
-        name: mongod
-        state: started
-
-    - name: Verify MongoDB version after upgrading to 7.0
-      command: mongo --eval "db.version()"
-      register: mongo_version_output_7_0
-
-    - name: Check MongoDB version after upgrade to 7.0
-      debug:
-        msg: "MongoDB version is {{ mongo_version_output_7_0.stdout }}"
-
-    # Additional tasks for application driver upgrade, configuration changes, etc.
+    - name: Verify test data after final upgrade
+      command: mongo {{ test_db }} --eval 'db.{{ test_collection }}.find({{ test_data }}).count()'
+      register: verify_test_data_after_final
+      changed_when: verify_test_data_after_final.stdout == "1"
 
   handlers:
     - name: Restart MongoDB service

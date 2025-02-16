@@ -22,6 +22,10 @@
       debug:
         msg: "MongoDB is already installed. Proceed with upgrade."
       when: mongodb_installed.rc == 0
+    
+    - name: exit from playbook if MongoDB is already installed
+      meta: end_play
+      when: mongodb_installed.rc == 0
 
     - name: Installion of MongoDB
       block:
@@ -58,7 +62,7 @@
 
             - name: Install MongoDB package (Ubuntu)
               apt:
-                name: mongodb-org={{ mongodb_minor_version }}  # Use the minor version here
+                name: mongodb-org={{ mongodb_minor_version }} 
                 state: present      
 
             - name: Start and enable MongoDB service
@@ -96,7 +100,7 @@
 
             - name: Install MongoDB package (RHEL/CentOS)
               yum:
-                name: mongodb-org={{ mongodb_minor_version }}  # Use the minor version here
+                name: mongodb-org={{ mongodb_minor_version }}  
                 state: present
 
             - name: Start and enable MongoDB service
