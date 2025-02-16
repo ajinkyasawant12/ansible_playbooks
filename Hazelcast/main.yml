@@ -1,0 +1,122 @@
+#playbook to setup and install Hazelcast on target vm
+
+---
+- name: Install or Upgrade Hazelcast
+  hosts: localhost
+  gather_facts: true
+  become: true
+
+  vars:
+    hazelcast_version: "5.0"  # Default Hazelcast version
+    hazelcast_installation_dir: /home/elastic/hazelcast
+    hazelcast_src_dir: /tmp/hazelcast-source
+    hazelcast_backup_dir: /home/elastic/hazelcast_backup
+
+  tasks:
+    - name: Check if "JAVA_HOME is set"
+      command: "echo $JAVA_HOME"
+      register: java_home
+      failed_when: java_home.stdout == ""
+
+    - name: exit if JAVA_HOME is not set
+      fail:
+        msg: "JAVA_HOME is not set. Please set JAVA_HOME before running this playbook"
+      when: java_home.stdout == ""
+    
+    - name: Install required packages for Hazelcast
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - wget
+        - tar
+        - gzip
+
+    - name: Check if Hazelcast is running
+      shell: "pgrep -f hazelcast"
+      register: hazelcast_pid
+      ignore_errors: true
+
+    - name: Print Hazelcast version if running
+      command: "{{ hazelcast_installation_dir }}/hazelcast-{{ hazelcast_version }}/bin/hazelcast --version"
+      when: hazelcast_pid.stdout != ""
+      register: hazelcast_version_output
+
+    - name: Print Hazelcast version
+      debug:
+        var: hazelcast_version_output.stdout
+      when: hazelcast_pid.stdout != ""
+
+    - name: Stop Hazelcast if running
+      command: "kill -TERM {{ hazelcast_pid.stdout }}"
+      when: hazelcast_pid.stdout != ""
+
+    - name: Wait for Hazelcast to stop
+      wait_for:
+        path: "/proc/{{ hazelcast_pid.stdout }}"
+        state: absent
+      when: hazelcast_pid.stdout != ""
+
+    - name: Backup existing Hazelcast directory
+      command: "cp -r {{ hazelcast_installation_dir }} {{ hazelcast_backup_dir }}"
+      when: hazelcast_pid.stdout != ""
+
+    - name: Create directories for Hazelcast source and installation
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: elastic
+        group: elastic
+      loop:
+        - "{{ hazelcast_src_dir }}"
+        - "{{ hazelcast_installation_dir }}"
+
+    - name: Download Hazelcast source code
+      get_url:
+        url: "https://repo1.maven.org/maven2/com/hazelcast/hazelcast-distribution/{{ hazelcast_version }}/hazelcast-{{ hazelcast_version }}.tar.gz"
+        dest: "{{ hazelcast_src_dir }}/hazelcast-{{ hazelcast_version }}.tar.gz"
+        owner: elastic
+        group: elastic
+
+    - name: Extract Hazelcast source code
+      unarchive:
+        src: "{{ hazelcast_src_dir }}/hazelcast-{{ hazelcast_version }}.tar.gz"
+        dest: "{{ hazelcast_installation_dir }}"
+        remote_src: yes
+        owner: elastic
+        group: elastic
+
+    - name: Update host ip in config/hazelcast.xml
+      replace:
+        path: "{{ hazelcast_installation_dir }}/hazelcast-{{ hazelcast_version }}/config/hazelcast.xml"
+        regexp: 'YOUR_HOST_IP'
+        replace: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+        backup: yes
+
+    - name: Updtate port to 5702 in config/hazelcast.xml
+      replace:
+        path: "{{ hazelcast_installation_dir }}/hazelcast-{{ hazelcast_version }}/config/hazelcast.xml"
+        regexp: '5701'
+        replace: "5702"
+        backup: yes
+
+    - name: Start Hazelcast
+      command: "{{ hazelcast_installation_dir }}/hazelcast-{{ hazelcast_version }}/bin/hazelcast"
+      async: 1000
+      poll: 0
+
+    - name: Wait for Hazelcast to start
+      wait_for:
+        port: 5702
+        delay: 10
+        timeout: 300
+
+    - name: Check Hazelcast status on host
+      uri:
+        url: "http://{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:5702/hazelcast/rest/cluster"
+        return_content: yes
+      register: hazelcast_status
+
+    - name: Print Hazelcast status
+      debug:
+        var: hazelcast_status.content
