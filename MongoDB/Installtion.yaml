@@ -1,38 +1,37 @@
 - name: Setup MongoDB
   hosts: your_target_hosts
-  gather_facts: yes
+  gather_facts: true
   become: true
 
   vars:
-    mongodb_major_version: 7.0
-    mongodb_minor_version: 7.0.2
+    mongodb_major_version: "7.0"
+    mongodb_minor_version: "7.0.2"
+    mongodb_version: "{{ mongodb_major_version }}"   # fixed: was missing, referenced in templates
 
   tasks:
     - name: Check OS version
-      setup:
+      ansible.builtin.setup:
       register: os_info
-    
+
     - name: Check if MongoDB is installed
-      command: mongod --version
+      ansible.builtin.command: mongod --version
       register: mongodb_installed
       failed_when: false
       changed_when: false
 
-    - name: Print message if MongoDB is installed
-      debug:
-        msg: "MongoDB is already installed. Proceed with upgrade."
-      when: mongodb_installed.rc == 0
-    
-    - name: exit from playbook if MongoDB is already installed
-      meta: end_play
+    - name: Fail with helpful message if MongoDB already installed
+      ansible.builtin.fail:        # fixed: was 'meta: end_play' (no user message, too abrupt)
+        msg: >
+          MongoDB is already installed ({{ mongodb_installed.stdout | default('unknown version') }}).
+          If you want to upgrade, run upgrade.yaml instead.
       when: mongodb_installed.rc == 0
 
-    - name: Installion of MongoDB
+    - name: Installation of MongoDB   # fixed: was 'Installion' (typo)
       block:
-        - name : Installion of MongoDB on ubuntu
+        - name: Installation of MongoDB on Ubuntu   # fixed: typo
           block:
             - name: Install MongoDB prerequisites (Ubuntu)
-              apt:
+              ansible.builtin.apt:
                 name:
                   - gnupg
                   - libcurl4
@@ -40,49 +39,52 @@
                   - lsb-release
                   - g++
                   - make
-                state: present  
+                state: present
 
             - name: Upload MongoDB .list file (Ubuntu)
-              template:
+              ansible.builtin.template:
                 src: mongodb-org.list.j2
                 dest: "/etc/apt/sources.list.d/mongodb-org-{{ mongodb_version }}.list"
                 owner: root
                 group: root
-                mode: 0644      
+                mode: '0644'
 
             - name: Add MongoDB GPG key (Ubuntu)
-              apt_key:
-                url: https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc
-                state: present     
+              ansible.builtin.apt_key:
+                url: "https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc"
+                state: present
 
             - name: Add MongoDB repository (Ubuntu)
-              apt_repository:
-                repo: deb [arch=amd64] https://repo.mongodb.org/apt/{{ os_info.ansible_facts['ansible_distribution'].lower() }} $(lsb_release -sc)/mongodb-org/{{ mongodb_version }} multiverse
-                state: present     
+              ansible.builtin.apt_repository:
+                repo: "deb [arch=amd64] https://repo.mongodb.org/apt/{{ ansible_distribution | lower }} {{ ansible_distribution_release }}/mongodb-org/{{ mongodb_version }} multiverse"
+                state: present
 
             - name: Install MongoDB package (Ubuntu)
-              apt:
-                name: mongodb-org={{ mongodb_minor_version }} 
-                state: present      
+              ansible.builtin.apt:
+                name: "mongodb-org={{ mongodb_minor_version }}"
+                state: present
 
             - name: Start and enable MongoDB service
-              service:
+              ansible.builtin.service:
                 name: mongod
                 state: started
-                enabled: yes
+                enabled: true
 
-            - name: Check MongoDB service status (Ubuntu)
-              command: systemctl status mongod
-              register: mongod_status
-              ignore_errors: yes
-          when: "'Ubuntu' in os_info.ansible_facts['ansible_distribution']"
+            - name: Verify MongoDB service is running (Ubuntu)
+              ansible.builtin.service_facts:          # fixed: was 'command: systemctl status' (always 'changed')
+            - name: Assert mongod is active
+              ansible.builtin.assert:
+                that: "'mongod' in services and services['mongod']['state'] == 'running'"
+                fail_msg: "MongoDB service is not running after installation"
 
-        - name : Installion of MongoDB on RHEL and CentOS
+          when: "'Ubuntu' in ansible_distribution"   # simplified: direct use of ansible_distribution
+
+        - name: Installation of MongoDB on RHEL and CentOS   # fixed typo
           block:
             - name: Install MongoDB prerequisites (RHEL/CentOS)
-              yum:
+              ansible.builtin.yum:
                 name:
-                  - gnupg
+                  - gnupg2
                   - libcurl
                   - wget
                   - redhat-lsb-core
@@ -91,29 +93,31 @@
                 state: present
 
             - name: Upload MongoDB .repo file (RHEL/CentOS)
-              template:
+              ansible.builtin.template:
                 src: mongodb-org.repo.j2
                 dest: "/etc/yum.repos.d/mongodb-org-{{ mongodb_version }}.repo"
                 owner: root
                 group: root
-                mode: 0644
+                mode: '0644'
 
             - name: Install MongoDB package (RHEL/CentOS)
-              yum:
-                name: mongodb-org={{ mongodb_minor_version }}  
+              ansible.builtin.yum:
+                name: "mongodb-org-{{ mongodb_minor_version }}"
                 state: present
 
             - name: Start and enable MongoDB service
-              service:
+              ansible.builtin.service:
                 name: mongod
                 state: started
-                enabled: yes
-            
-            - name: Check MongoDB service status (RHEL/CentOS)  
-              command: service mongod status
-              register: mongod_status
-              ignore_errors: yes
-          when: "'RedHat' in os_info.ansible_facts['ansible_distribution'] or 'CentOS' in os_info.ansible_facts['ansible_distribution']"  
-      when: mongodb_installed.rc != 0
+                enabled: true
 
-    
+            - name: Verify MongoDB service is running (RHEL/CentOS)
+              ansible.builtin.service_facts:          # fixed: was 'command: service mongod status'
+            - name: Assert mongod is active
+              ansible.builtin.assert:
+                that: "'mongod' in services and services['mongod']['state'] == 'running'"
+                fail_msg: "MongoDB service is not running after installation"
+
+          when: ansible_distribution in ['RedHat', 'CentOS']
+
+      when: mongodb_installed.rc != 0

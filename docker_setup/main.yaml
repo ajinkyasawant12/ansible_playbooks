@@ -1,15 +1,24 @@
 ---
-#Ansible playbook for Docker installation on Ubuntu 
+#Ansible playbook for Docker installation — dispatches to OS-specific task files
 
-- name: Install Docker on Ubuntu
-  hosts: localhost
+- name: Install Docker
+  hosts: all
   become: true
+  gather_facts: true     # required: ansible_os_family comes from gathered facts
   vars_files:
     - vars/default.yml
 
   tasks:
-    - include_tasks : ubuntu_setup.yaml 
-      when: ansible_os_family=="Ubuntu"
-    - include_tasks : rhel_setup.yaml 
-      when: ansible_os_family=="RedHat"
-    
+    - name: Install Docker on Debian/Ubuntu
+      ansible.builtin.import_tasks: ubuntu_setup.yaml    # import_tasks (not include_tasks) supports when: reliably
+      when: ansible_os_family == "Debian"                # Ubuntu belongs to the 'Debian' family
+
+    - name: Install Docker on RHEL/CentOS
+      ansible.builtin.import_tasks: rhel_setup.yaml
+      when: ansible_os_family == "RedHat"
+
+  handlers:
+    - name: restart docker
+      ansible.builtin.service:
+        name: docker
+        state: restarted

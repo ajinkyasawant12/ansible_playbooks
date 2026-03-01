@@ -3,8 +3,9 @@
   hosts: mongodb_servers
   become: true
   vars:
-    mongodb_version: "4.0" # Current MongoDB version
-    target_mongodb_version: "7.0" # Target MongoDB version
+    mongodb_version: "4.0"           # current installed version
+    target_mongodb_version: "7.0"
+    backup_dir: "/var/backups/mongodb/{{ ansible_date_time.date }}"   # fixed: was placeholder path
     test_db: "test_db"
     test_collection: "test_collection"
     test_data: '{"name": "test", "value": 1}'
@@ -12,60 +13,74 @@
       - "4.2"
       - "4.4"
       - "5.0"
+      - "6.0"    # CRITICAL FIX: was missing — MongoDB requires sequential major version upgrades
       - "7.0"
 
   tasks:
     - name: Stop MongoDB service
-      service:
+      ansible.builtin.service:
         name: mongod
         state: stopped
 
     - name: Backup MongoDB data
-      command: mongodump --out /path/to/backup/directory
-      args:
-        warn: false
+      ansible.builtin.command: "mongodump --out {{ backup_dir }}"
+      # Removed: args: warn: false  — deprecated and removed in Ansible 2.14+
       register: backup_output
       changed_when: backup_output.rc == 0
 
-    - name: exit from playbook if backup failed
-      meta: end_play
+    - name: Fail if backup failed
+      ansible.builtin.fail:
+        msg: "MongoDB backup failed. Aborting upgrade to protect data."
       when: backup_output.rc != 0
 
     - name: Start MongoDB service
-      service:
+      ansible.builtin.service:
         name: mongod
         state: started
 
     - name: Insert test data into MongoDB
-      command: mongo {{ test_db }} --eval 'db.{{ test_collection }}.insert({{ test_data }})'
+      ansible.builtin.command: >
+        mongosh {{ test_db }}
+        --eval 'db.{{ test_collection }}.insertOne({{ test_data }})'
+      # fixed: was 'mongo' — deprecated since MongoDB 5.0, removed in 6.0; use 'mongosh'
       register: insert_test_data_output
 
     - name: Verify test data insertion
-      command: mongo {{ test_db }} --eval 'db.{{ test_collection }}.find({{ test_data }}).count()'
+      ansible.builtin.command: >
+        mongosh {{ test_db }}
+        --eval 'db.{{ test_collection }}.countDocuments({{ test_data }})'
       register: verify_test_data_insertion
-      changed_when: verify_test_data_insertion.stdout == "1"
+      changed_when: false
 
-    - name: Upgrade MongoDB
-      include_tasks: upgrade_mongodb.yml
+    - name: Upgrade MongoDB through each major version
+      ansible.builtin.include_tasks: upgrade_mongodb.yml
       loop: "{{ upgrade_versions }}"
       loop_control:
         loop_var: upgrade_version
 
-    - name: Verify MongoDB version after upgrading to {{ target_mongodb_version }}
-      command: mongo --eval "db.version()"
+    - name: Verify MongoDB version after full upgrade
+      ansible.builtin.command: mongosh --eval "db.version()"
       register: mongo_version_output_final
+      changed_when: false
 
-    - name: Check MongoDB version after upgrade to {{ target_mongodb_version }}
-      debug:
-        msg: "MongoDB version is {{ mongo_version_output_final.stdout }}"
+    - name: Print final MongoDB version
+      ansible.builtin.debug:
+        msg: "MongoDB upgraded successfully. Current version: {{ mongo_version_output_final.stdout }}"
 
-    - name: Verify test data after final upgrade
-      command: mongo {{ test_db }} --eval 'db.{{ test_collection }}.find({{ test_data }}).count()'
+    - name: Verify test data survives upgrade
+      ansible.builtin.command: >
+        mongosh {{ test_db }}
+        --eval 'db.{{ test_collection }}.countDocuments({{ test_data }})'
       register: verify_test_data_after_final
-      changed_when: verify_test_data_after_final.stdout == "1"
+      changed_when: false
+
+    - name: Assert test data is intact
+      ansible.builtin.assert:
+        that: verify_test_data_after_final.stdout | int >= 1
+        fail_msg: "Test data was lost during upgrade!"
 
   handlers:
     - name: Restart MongoDB service
-      service:
+      ansible.builtin.service:
         name: mongod
         state: restarted

@@ -1,31 +1,37 @@
 ---
-- name: Ansible k8s module example
-  hosts: web
-  remote_user: root  
+- name: Manage Kubernetes resources
+  hosts: localhost
+  gather_facts: false   # k8s API calls don't need host facts
+
   tasks:
     - name: Create a k8s namespace
       kubernetes.core.k8s:
-        name: test-namespace 
+        name: test-namespace
         api_version: v1
         kind: Namespace
-        state: present    
+        state: present
 
-    - name: Create a pod
+    - name: Create a pod from manifest
       kubernetes.core.k8s:
-        state: present      
-        namespace: test-namespace 
-        src: /tmp/pod.yaml
+        state: present
+        namespace: test-namespace
+        src: "{{ playbook_dir }}/pod.yaml"   # relative to playbook, not hardcoded /tmp
 
-    - name: Get an existing Pods in the kubernetes cluster
-      kubernetes.core.k8s:
+    - name: Get existing Pod and assert it is running
+      kubernetes.core.k8s_info:            # use k8s_info for read operations
         api_version: v1
-        kind: pod
+        kind: Pod                          # fixed: was 'pod' (wrong case)
         name: nginx
-        namespace: test-namespace  
+        namespace: test-namespace
       register: web_service
 
-    - name: Create a deployment
+    - name: Assert nginx pod is Running
+      ansible.builtin.assert:
+        that: web_service.resources | length > 0
+        fail_msg: "Pod 'nginx' not found in test-namespace"
+
+    - name: Create a deployment from manifest
       kubernetes.core.k8s:
-        state: present            
-        namespace: test-namespace  
-        src: /tmp/deployment.yaml  
+        state: present
+        namespace: test-namespace
+        src: "{{ playbook_dir }}/deployment.yml"

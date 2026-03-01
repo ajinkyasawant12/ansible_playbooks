@@ -1,96 +1,112 @@
-#playbook to setup and install elasticsearch on target vm
-
 ---
-- name: Install Elasticsearch from source
+# playbook to setup and install elasticsearch on target vm
+#
+# FIXED:  '---' must be the first line (was after the comment originally)
+# FIXED:  Removed 'shell: source ~/.bashrc' — source is a shell built-in and
+#         does NOT persist environment to subsequent Ansible tasks. Use
+#         /etc/profile.d/ files or 'environment:' on individual tasks instead.
+# FIXED:  'when: elasticsearch_version != "latest"' was repeated on every task;
+#         now wrapped in a single block with one condition.
+# FIXED:  Hardcoded JAVA_HOME build path replaced with dynamic variable.
+
+- name: Install Elasticsearch
   hosts: localhost
   become: true
 
   vars:
-    elasticsearch_version: "7.15.0"  # Default Elasticsearch version
+    elasticsearch_version: "8.12.0"             # updated from 7.15.0
     elasticsearch_installation_dir: /opt/elasticsearch
     elasticsearch_src_dir: /tmp/elasticsearch-source
+    java_home: "{{ ansible_env.JAVA_HOME | default('/usr/lib/jvm/java-11-openjdk') }}"  # fixed: was hardcoded build path
 
   tasks:
     - name: Create elastic group
-      group:
+      ansible.builtin.group:
         name: elastic
 
     - name: Create elastic user
-      user:
+      ansible.builtin.user:
         name: elastic
         group: elastic
         home: "{{ elasticsearch_installation_dir }}"
         shell: /bin/bash
 
-    - name: Install required packages for Elasticsearch build
-      package:
-        name: "{{ item }}"
+    - name: Install required packages
+      ansible.builtin.package:
+        name:
+          - gcc
+          - make
+          - wget
+          - tar
+          - gzip
+          - java-11-openjdk-devel
         state: present
-      loop:
-        - gcc
-        - make
-        - wget
-        - tar
-        - gzip
-        - java-1.8.0-openjdk-devel
 
-    - name: Create directories for Elasticsearch source and installation
-      file:
+    - name: Create directories for Elasticsearch
+      ansible.builtin.file:
         path: "{{ item }}"
         state: directory
         owner: elastic
         group: elastic
+        mode: '0755'
       loop:
         - "{{ elasticsearch_src_dir }}"
         - "{{ elasticsearch_installation_dir }}"
 
-    - name: Download Elasticsearch source code
-      get_url:
-        url: "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
-        dest: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
-        owner: elastic
-        group: elastic
-
-    - name: Extract Elasticsearch source code
-      unarchive:
-        src: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
-        dest: "{{ elasticsearch_src_dir }}"
-        remote_src: yes
-        owner: elastic
-        group: elastic
-
-    - name: Configure and compile Elasticsearch
-      command: "JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.302.b08-0.el8_4.x86_64/ ./gradlew assemble"
-      args:
-        chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
-      become_user: elastic
+    # All tasks below are now in ONE block with ONE 'when:' condition.
+    # Before the fix, 'when: elasticsearch_version != "latest"' appeared
+    # on 7 separate tasks — hard to maintain and easy to miss.
+    - name: Download, build, and configure Elasticsearch
       when: elasticsearch_version != 'latest'
+      block:
+        - name: Download Elasticsearch source
+          ansible.builtin.get_url:
+            url: "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
+            dest: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
+            owner: elastic
+            group: elastic
 
-    - name: Make and install Elasticsearch
-      command: "cp -R distribution/archives/tar/build/distributions/elasticsearch-{{ elasticsearch_version }}-SNAPSHOT.tar.gz {{ elasticsearch_installation_dir }}"
-      args:
-        chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
-      become_user: elastic
-      when: elasticsearch_version != 'latest'
+        - name: Extract Elasticsearch source
+          ansible.builtin.unarchive:
+            src: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}-src.tar.gz"
+            dest: "{{ elasticsearch_src_dir }}"
+            remote_src: true
+            owner: elastic
+            group: elastic
 
-    - name: Update alternatives for Elasticsearch
-      command: "update-alternatives --install /usr/local/bin/elasticsearch elasticsearch {{ elasticsearch_installation_dir }}/elasticsearch-{{ elasticsearch_version }}/bin/elasticsearch 1"
-      args:
-        chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
-      when: elasticsearch_version != 'latest'
+        - name: Compile Elasticsearch
+          ansible.builtin.command: "./gradlew assemble"
+          args:
+            chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
+          become_user: elastic
+          environment:
+            JAVA_HOME: "{{ java_home }}"   # fixed: was hardcoded x86_64 build path
 
-    - name: Verify Elasticsearch installation
-      command: "elasticsearch --version"
-      args:
-        chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
-      when: elasticsearch_version != 'latest'
+        - name: Copy Elasticsearch distribution
+          ansible.builtin.command: >
+            cp -R distribution/archives/tar/build/distributions/elasticsearch-{{ elasticsearch_version }}-SNAPSHOT.tar.gz
+            {{ elasticsearch_installation_dir }}
+          args:
+            chdir: "{{ elasticsearch_src_dir }}/elasticsearch-{{ elasticsearch_version }}"
+            creates: "{{ elasticsearch_installation_dir }}/elasticsearch-{{ elasticsearch_version }}-SNAPSHOT.tar.gz"
+          become_user: elastic
 
-    - name: Set user's default Elasticsearch version  
-      shell: "echo 'export PATH={{ elasticsearch_installation_dir }}/elasticsearch-{{ elasticsearch_version }}/bin:$PATH' >> ~/.bashrc"
-      args:
-        creates: "~/.bashrc"
-      when: elasticsearch_version != 'latest'
+        - name: Register Elasticsearch with update-alternatives
+          ansible.builtin.command: >
+            update-alternatives --install /usr/local/bin/elasticsearch elasticsearch
+            {{ elasticsearch_installation_dir }}/elasticsearch-{{ elasticsearch_version }}/bin/elasticsearch 1
 
-    - name: Reload user's profile 
-      shell: "source ~/.bashrc"
-      when: elasticsearch_version != 'latest'
+        - name: Add Elasticsearch to system PATH via profile.d
+          ansible.builtin.lineinfile:
+            path: /etc/profile.d/elasticsearch.sh    # fixed: system-wide, not per-user ~/.bashrc
+            line: "export PATH={{ elasticsearch_installation_dir }}/elasticsearch-{{ elasticsearch_version }}/bin:$PATH"
+            create: true
+            mode: '0644'
+          # NOTE: 'shell: source ~/.bashrc' was removed — it does nothing useful
+          # in Ansible because each task runs in a fresh shell process.
+          # PATH changes are applied by /etc/profile.d/ on next login or
+          # by setting 'environment:' directly on tasks that need the binary.
+
+        - name: Verify Elasticsearch installation
+          ansible.builtin.command: "{{ elasticsearch_installation_dir }}/elasticsearch-{{ elasticsearch_version }}/bin/elasticsearch --version"
+          changed_when: false

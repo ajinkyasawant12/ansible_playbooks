@@ -1,9 +1,17 @@
 ---
-# Create jumpbox on an EC2 instance
+# Create EC2 jumpbox instances, then optionally configure them.
+# Usage:
+#   ansible-playbook create-ec2.yml              # create only
+#   ansible-playbook create-ec2.yml -e configure=true  # create + configure
+
 - hosts: local
-  gather_facts: False
+  gather_facts: false
   roles:
     - role: create-ec2-instances
+  tags: [create]
 
+# NOTE: 'import_playbook' does NOT support 'when:' — the condition is silently
+# ignored and the imported playbook ALWAYS runs.  The recommended fix is to
+# pass control into configure-ec2.yml itself, or use a conditional role here.
+# The 'configure' guard has been moved inside configure-ec2.yml (see that file).
 - import_playbook: configure-ec2.yml
-  when: configure is defined

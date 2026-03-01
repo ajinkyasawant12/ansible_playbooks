@@ -1,57 +1,71 @@
 ---
-#Ansible playbook for Docker installation on Ubuntu 
+# ubuntu_setup.yaml — Docker installation tasks for Ubuntu/Debian
+# Called via 'import_tasks' from main.yaml — NO play header here.
+# vars_files are already loaded by the parent play in main.yaml.
 
-- name: Install Docker on Ubuntu
-  hosts: all
-  become: true
-  vars_files:
-    - vars/default.yml
+- name: Install Docker dependencies
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - software-properties-common
+    state: present
+    update_cache: true
 
-  tasks:
-    - name: Installing dependencies
-      apt:
-        name: "{{item}}"
-        state: present
-        update_cache: yes
-      loop: [ 'apt-transport-https', 'ca-certificates', 'curl', 'software-properties-common', 'python3-pip', 'virtualenv', 'python3-setuptools']
+- name: Create apt keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
 
-    - name: Adding Docker GPG key
-      apt_key:
-        url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
-        state: present
+- name: Add Docker GPG key     # replaced: deprecated apt_key module
+  ansible.builtin.get_url:
+    url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+    force: false
 
-    - name: Adding Docker repository
-      apt_repository:
-        repo: "deb [arch={{ ansible_architecture }}] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
-        state: present
+- name: Add Docker repository  # uses signed-by for modern apt security
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch={{ ansible_architecture }} signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/{{ ansible_distribution | lower }}
+      {{ ansible_distribution_release }} stable
+    state: present
+    filename: docker
 
-    - name: Installing Docker
-      apt:
-        name: "{{item}}"
-        state: latest
-        update_cache: yes
-      loop: [ 'docker-ce', 'docker-ce-cli' ]
+- name: Install Docker CE
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present             # fixed: was 'latest' (non-idempotent, triggers upgrades every run)
+    update_cache: true
+  notify: restart docker
 
-    - name: Install Docker Module for Python
-      pip:
-        name: docker
+- name: Start and enable Docker service
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
 
-    - name: Pull default Docker image
-      docker_image:
-        name: "{{ image_name }}"
-        source: pull
-      
-    - name: Create default containers
-      docker_container:
-        name: "{{ container_name }}{{ item }}"
-        image: "{{ image_name }}"
-        command: "{{ container_command }}"
-        state: present
-      with_sequence: count={{ container_count }}
+- name: Install Docker SDK for Python
+  ansible.builtin.pip:
+    name: docker
+    state: present
 
-  handlers:
-    - name: restart docker
-      service: 
-        name: docker 
-        state: restarted
+- name: Pull default Docker image
+  community.docker.docker_image:
+    name: "{{ image_name }}"
+    source: pull
 
+- name: Create containers
+  community.docker.docker_container:
+    name: "{{ container_name }}{{ item }}"
+    image: "{{ image_name }}"
+    command: "{{ container_command }}"
+    state: present
+  loop: "{{ range(1, container_count + 1) | list }}"   # updated: was legacy with_sequence

@@ -1,54 +1,27 @@
 ---
 - name: Read and set specific environment variables from .bash_profile
   hosts: localhost
-  gather_facts: no
+  gather_facts: false
+
   tasks:
     - name: Read .bash_profile
-      command: cat ~/.bash_profile
-      register: bash_profile_content
+      ansible.builtin.slurp:              # replaced: was 'command: cat' (unnecessary shell-out)
+        src: "{{ ansible_env.HOME }}/.bash_profile"
+      register: bash_profile_raw
 
-    - name: Extract TOP environment variable
-      set_fact:
-        top_var: "{{ bash_profile_content.stdout | regex_search('export TOP=(.+)', '\\1') }}"
-    
-    - name: Extract Java_Home environment variable
-      set_fact:
-        java_home_var: "{{ bash_profile_content.stdout | regex_search('export Java_Home=(.+)', '\\1') }}"
+    - name: Decode profile content
+      ansible.builtin.set_fact:
+        bash_profile_content: "{{ bash_profile_raw.content | b64decode }}"
 
-    - name: Extract Java8_Home environment variable
-      set_fact:
-        java8_home_var: "{{ bash_profile_content.stdout | regex_search('export Java8_Home=(.+)', '\\1') }}"
-    
-    - name: Extract Perl_home environment variable
-      set_fact:
-        perl_home_var: "{{ bash_profile_content.stdout | regex_search('export Perl_home=(.+)', '\\1') }}"
-
-    - name: Set environment variables for subsequent tasks
-      set_fact:
+    - name: Extract environment variables   # combined: was 4 separate set_fact tasks
+      ansible.builtin.set_fact:
         env_vars:
-          TOP: "{{ top_var }}"
-          Java_Home: "{{ java_home_var }}"
-          Java8_Home: "{{ java8_home_var }}"
-          Perl_home: "{{ perl_home_var }}"
+          TOP:        "{{ bash_profile_content | regex_search('export TOP=(.+)', '\\1') | first | default('') }}"
+          JAVA_HOME:  "{{ bash_profile_content | regex_search('export Java_Home=(.+)', '\\1') | first | default('') }}"
+          JAVA8_HOME: "{{ bash_profile_content | regex_search('export Java8_Home=(.+)', '\\1') | first | default('') }}"
+          PERL_HOME:  "{{ bash_profile_content | regex_search('export Perl_home=(.+)', '\\1') | first | default('') }}"
 
-    - name: Print extracted environment variables (for debugging)
-      debug:
+    - name: Print extracted environment variables
+      ansible.builtin.debug:
         msg: "{{ item.key }}={{ item.value }}"
-      with_items: "{{ env_vars | dict2items }}"
-
-    # Example tasks that use the extracted environment variables
-    - name: Example task that uses the TOP environment variable
-      shell: echo $TOP
-      environment: "{{ env_vars }}"
-    
-    - name: Example task that uses the Java_Home environment variable
-      shell: echo $Java_Home
-      environment: "{{ env_vars }}"
-
-    - name: Example task that uses the Java8_Home environment variable
-      shell: echo $Java8_Home
-      environment: "{{ env_vars }}"
-
-    - name: Example task that uses the Perl_home environment variable
-      shell: echo $Perl_home
-      environment: "{{ env_vars }}"
+      loop: "{{ env_vars | dict2items }}"   # updated: was legacy with_items:

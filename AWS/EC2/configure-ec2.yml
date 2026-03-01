@@ -1,20 +1,33 @@
 ---
+# Configure EC2 jumpbox instances.
+# Only runs if 'configure' variable is defined (e.g. -e configure=true).
+# The guard is here rather than in create-ec2.yml because import_playbook
+# does not support 'when:' conditions.
 
-# Configure jumpbox
 - hosts: jumpbox
-  become: True
-  gather_facts: True
+  become: true
+  gather_facts: true
+
+  # Packages to install — override in group_vars or with -e jumpbox_packages=[...]
+  vars:
+    jumpbox_packages:
+      - git
+      - php
+      - php-fpm
+
+  pre_tasks:
+    - name: Skip configuration if 'configure' variable is not set
+      ansible.builtin.meta: end_play
+      when: configure is not defined
+
   tasks:
+    - name: Install jumpbox packages
+      ansible.builtin.yum:
+        name: "{{ jumpbox_packages }}"
+        state: present          # fixed: was 'latest' (non-idempotent)
 
-    - name: Upgrade all yum packages
-      yum:
-        name: '*'
-        state: latest
-
-    - name: Install packages
-      yum:
-        name: "{{ packages }}"
-      vars:
-        packages:
-          - git
-          - php
+  handlers:
+    - name: restart php-fpm
+      ansible.builtin.service:
+        name: php-fpm
+        state: restarted
